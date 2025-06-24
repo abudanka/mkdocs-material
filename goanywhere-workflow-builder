@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>GoAnywhere Workflow XML Builder</title>
+  <style>
+    body { font-family: Arial; margin: 20px; }
+    label { font-weight: bold; display: block; margin-top: 10px; }
+    input, select, textarea { width: 100%; padding: 5px; margin-bottom: 10px; }
+    button { padding: 10px 20px; font-weight: bold; }
+    textarea#output { height: 400px; white-space: pre; font-family: monospace; }
+    .section { border: 1px solid #ccc; padding: 10px; margin-top: 10px; background: #f9f9f9; }
+  </style>
+</head>
+<body>
+
+  <h2>GoAnywhere Workflow XML Generator</h2>
+
+  <label>Project Name</label>
+  <input type="text" id="projectName" placeholder="e.g., a0000-Source-Target-Filetype" />
+
+  <label>Encryption Key Alias</label>
+  <input type="text" id="encryptionKey" placeholder="my-key-alias" />
+
+  <label>Email for Error Alerts</label>
+  <input type="email" id="email" placeholder="admin@example.com" />
+
+  <!-- Source -->
+  <div class="section">
+    <h3>Source Configuration</h3>
+    <label>Source Type</label>
+    <select id="sourceType" onchange="toggleSourceFields()">
+      <option value="Local">Local</option>
+      <option value="SFTP">SFTP</option>
+      <option value="Agent">Agent</option>
+    </select>
+
+    <div id="sourceLocal">
+      <label>Local Path</label>
+      <input type="text" id="sourceLocalPath" placeholder="/source/path/" />
+    </div>
+
+    <div id="sourceSFTP" style="display:none;">
+      <label>SFTP Host</label><input type="text" id="sourceSftpHost" />
+      <label>SFTP Username</label><input type="text" id="sourceSftpUser" />
+      <label>SFTP Password</label><input type="password" id="sourceSftpPass" />
+      <label>SFTP Remote Dir</label><input type="text" id="sourceSftpDir" />
+    </div>
+
+    <div id="sourceAgent" style="display:none;">
+      <label>Agent Name</label><input type="text" id="sourceAgentName" />
+      <label>Directory Path</label><input type="text" id="sourceAgentPath" />
+    </div>
+  </div>
+
+  <!-- Target -->
+  <div class="section">
+    <h3>Target Configuration</h3>
+    <label>Target Type</label>
+    <select id="targetType" onchange="toggleTargetFields()">
+      <option value="Local">Local</option>
+      <option value="SFTP">SFTP</option>
+      <option value="Agent">Agent</option>
+    </select>
+
+    <div id="targetLocal">
+      <label>Local Path</label>
+      <input type="text" id="targetLocalPath" placeholder="/target/path/" />
+    </div>
+
+    <div id="targetSFTP" style="display:none;">
+      <label>SFTP Host</label><input type="text" id="targetSftpHost" />
+      <label>SFTP Username</label><input type="text" id="targetSftpUser" />
+      <label>SFTP Password</label><input type="password" id="targetSftpPass" />
+      <label>SFTP Remote Dir</label><input type="text" id="targetSftpDir" />
+    </div>
+
+    <div id="targetAgent" style="display:none;">
+      <label>Agent Name</label><input type="text" id="targetAgentName" />
+      <label>Directory Path</label><input type="text" id="targetAgentPath" />
+    </div>
+  </div>
+
+  <button onclick="generateXML()">Generate Workflow XML</button>
+
+  <label>Generated XML:</label>
+  <textarea id="output" readonly></textarea>
+
+  <script>
+    function toggleSourceFields() {
+      const type = document.getElementById("sourceType").value;
+      document.getElementById("sourceLocal").style.display = (type === "Local") ? "block" : "none";
+      document.getElementById("sourceSFTP").style.display = (type === "SFTP") ? "block" : "none";
+      document.getElementById("sourceAgent").style.display = (type === "Agent") ? "block" : "none";
+    }
+
+    function toggleTargetFields() {
+      const type = document.getElementById("targetType").value;
+      document.getElementById("targetLocal").style.display = (type === "Local") ? "block" : "none";
+      document.getElementById("targetSFTP").style.display = (type === "SFTP") ? "block" : "none";
+      document.getElementById("targetAgent").style.display = (type === "Agent") ? "block" : "none";
+    }
+
+    function generateXML() {
+      const proj = document.getElementById("projectName").value;
+      const key = document.getElementById("encryptionKey").value;
+      const email = document.getElementById("email").value;
+      const ts = "date +%Y%m%d%H%M%S";
+
+      const sourceType = document.getElementById("sourceType").value;
+      let sourceDetails = "";
+      if (sourceType === "Local") {
+        sourceDetails = `<ListFiles name="ListSourceFiles">
+  <directory>${document.getElementById("sourceLocalPath").value}</directory>
+  <fileSet variable="FileList"/>
+</ListFiles>`;
+      } else if (sourceType === "SFTP") {
+        sourceDetails = `<!-- Add SFTP GET logic for source here -->`;
+      } else if (sourceType === "Agent") {
+        sourceDetails = `<ListFiles name="ListSourceFiles">
+  <agent>${document.getElementById("sourceAgentName").value}</agent>
+  <directory>${document.getElementById("sourceAgentPath").value}</directory>
+  <fileSet variable="FileList"/>
+</ListFiles>`;
+      }
+
+      const targetType = document.getElementById("targetType").value;
+      let targetPut = "";
+      let targetDir = "";
+      if (targetType === "Local") {
+        targetDir = document.getElementById("targetLocalPath").value;
+        targetPut = `<Rename name="RenameWithTimestamp">
+  <source>\${CurrentFile}_enc</source>
+  <destination>${targetDir}/\${fileName}_\${Timestamp}.pgp</destination>
+</Rename>`;
+      } else if (targetType === "SFTP") {
+        targetDir = document.getElementById("targetSftpDir").value;
+        targetPut = `<SFTPPut name="SendToTarget">
+  <host>${document.getElementById("targetSftpHost").value}</host>
+  <port>22</port>
+  <username>${document.getElementById("targetSftpUser").value}</username>
+  <password>${document.getElementById("targetSftpPass").value}</password>
+  <localFile>\${CurrentFile}_enc</localFile>
+  <remoteDir>${targetDir}</remoteDir>
+</SFTPPut>`;
+      } else if (targetType === "Agent") {
+        targetDir = document.getElementById("targetAgentPath").value;
+        targetPut = `<CopyFile name="CopyToAgent">
+  <source>\${CurrentFile}_enc</source>
+  <destination>${targetDir}/\${fileName}_\${Timestamp}.pgp</destination>
+  <agent>${document.getElementById("targetAgentName").value}</agent>
+</CopyFile>`;
+      }
+
+      const xml = `
+<Workflow name="${proj}" project="${proj}">
+  <Schedule>
+    <frequency>Minute</frequency>
+    <interval>1</interval>
+  </Schedule>
+
+  <Variables>
+    <Variable name="EncryptionKey" value="${key}"/>
+    <Variable name="Timestamp" script="${ts}"/>
+  </Variables>
+
+  <Tasks>
+    ${sourceDetails}
+
+    <ForEach name="LoopFiles">
+      <list>\${FileList}</list>
+      <variable>CurrentFile</variable>
+      <Tasks>
+        <PGPEncrypt name="EncryptFile">
+          <input>\${CurrentFile}</input>
+          <output>\${CurrentFile}_enc</output>
+          <key>\${EncryptionKey}</key>
+        </PGPEncrypt>
+
+        ${targetPut}
+      </Tasks>
+    </ForEach>
+  </Tasks>
+
+  <OnError>
+    <SendEmail name="ErrorEmail">
+      <to>${email}</to>
+      <subject>Error in Workflow</subject>
+      <body>File: \${CurrentFile} failed</body>
+    </SendEmail>
+  </OnError>
+</Workflow>
+`.trim();
+
+      document.getElementById("output").value = xml;
+    }
+  </script>
+
+</body>
+</html>
